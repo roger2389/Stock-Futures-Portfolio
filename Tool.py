@@ -8,7 +8,7 @@ qs.extend_pandas()
 import cufflinks as cf
 cf.go_offline()
 class Handler(dict):
-    def __init__(self,path,data_type:str = 'parquet'):
+    def __init__(self, path, data_type: str = 'parquet'):
         self.path = path
         self.cashe_dict = {}
         self.func_dict = operators_v4.Alpha_F
@@ -17,7 +17,8 @@ class Handler(dict):
         self.data_type = data_type
         self.reindex_like = None
 
-        os.makedirs(path,exist_ok=True)
+        os.makedirs(path, exist_ok=True)
+
     def __getitem__(self, key):
         if key in self.cashe_dict:
             return self.cashe_dict[key]
@@ -25,31 +26,64 @@ class Handler(dict):
             return self.func_dict[key]
         else:
             file_path = os.path.join(self.path, f'{key}.{self.data_type}')
-            # 检查存储的文件是否存在
             if os.path.exists(file_path):
                 try:
                     if self.data_type == 'parquet':
-                        if self.reindex_like is not None:
-                            return pd.read_parquet(file_path).reindex_like(self.reindex_like).astype(float)
-                        else:
-                            return pd.read_parquet(file_path).astype(float)
+                        data = pd.read_parquet(file_path)
                     elif self.data_type == 'pkl':
-                        if self.reindex_like is not None:
-                            return pd.read_pickle(file_path).reindex_like(self.reindex_like).astype(float)
-                        else:
-                            return pd.read_pickle(file_path).astype(float)
-                except :
-                    # 如果文件损坏或无法读取，返回默认值
-                    raise ValueError(f'文件{file_path}损坏或无法读取')
-            raise ValueError(f'文件{file_path}不存在')
+                        data = pd.read_pickle(file_path)
+                    else:
+                        raise ValueError(f'不支援的格式: {self.data_type}')
+
+                    if self.reindex_like is not None:
+                        data = data.reindex_like(self.reindex_like)
+
+                    data = data.astype(float, errors='ignore')
+                    self.cashe_dict[key] = data
+                    return data
+                except Exception as e:
+                    raise ValueError(f'讀取失敗: {file_path}，錯誤: {e}')
+            raise ValueError(f'找不到資料檔案：{file_path}')
+
     def __call__(self, key):
         return self.__getitem__(key)
+
     def __setitem__(self, key, value):
         file_path = os.path.join(self.path, f'{key}.{self.data_type}')
-        value[np.isfinite(value)].to_parquet(file_path)
+
+        # 處理 DataFrame
+        if isinstance(value, pd.DataFrame):
+            value = value.copy()
+            numeric_cols = value.select_dtypes(include=[np.number]).columns
+            for col in numeric_cols:
+                value[col] = value[col].where(np.isfinite(value[col]))
+            # 非數值欄位保留不動
+        elif isinstance(value, pd.Series):
+            if np.issubdtype(value.dtype, np.number):
+                value = value.where(np.isfinite(value))
+            else:
+                pass  # 不處理非數值欄位
+
+        else:
+            raise TypeError(f"{key} 的資料型態 {type(value)} 無法被儲存")
+
+        # 儲存檔案
+        if self.data_type == 'parquet':
+            value.to_parquet(file_path)
+        elif self.data_type == 'pkl':
+            value.to_pickle(file_path)
+        else:
+            raise ValueError(f"不支援的格式：{self.data_type}")
+
+        self.cashe_dict[key] = value
+
     def cash_list(self):
-        parquet_set = set(filter(lambda X:X.endswith(f".{self.data_type}"),os.listdir(self.path)))
-        return sorted(map(lambda X:X[:-(len(self.data_type)+1)],list(parquet_set)))
+        return sorted([
+            filename[:-(len(self.data_type) + 1)]
+            for filename in os.listdir(self.path)
+            if filename.endswith(f".{self.data_type}")
+        ])
+
 def max_drawdown(prices):
     # 計算累計的最大值
     cumulative_max = prices.cummax()

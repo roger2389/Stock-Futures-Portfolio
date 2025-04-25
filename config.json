@@ -1,0 +1,18 @@
+{
+    "TARGET_Expr": "Adj_close.shift(-21) / Adj_close.shift(-1) - 1",
+    "OUTPUT_DATA_PATH": "./Results/Results.xlsx",
+    "DATE_FROM": "2010-01-01",
+    "DATE_TO": "2018-12-31",
+    "FIT_FUNC": "LS_cagr",
+    "FIT_THRES": 0,
+    "AMT": "inf",
+    "POP": 2000,
+    "GEN": 10,
+    "use_data_count_threshold":1000,
+    "EarlyStop":5,
+    "Con":"(Value_Dollars.rolling(5).mean() > 0)",
+    "Handler_cache_path":"C:\\Users\\User\\Documents\\MBQ_TW_DB",
+    "data_type":"parquet",
+    "Corr_threshold":0.8,
+    "n_jobs":-1
+}
